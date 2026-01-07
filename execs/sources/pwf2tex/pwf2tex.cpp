@@ -24,7 +24,6 @@
 
 #define INFO(s, ...) printf(s, __VA_ARGS__);
 #define ERROR(s, ...) fprintf(stderr, s, __VA_ARGS__);
-#define MAX_PATH 256
 
 static int cmd_extract(int argc, char *args[]);
 static int cmd_extract_list(int argc, char *args[]);
@@ -84,31 +83,32 @@ const char *extof(const char *filename) {
 
 bool tm0env_t::save(const char *path) {
     void *tm0;
-    char lbuf[MAX_PATH];
 
     for (tm0info_t &tm0info : this->tm0s) {
-        const char *tm0filename = tm0info.name.c_str();
-        snprintf(lbuf, sizeof(lbuf), "%s/%s", path, tm0filename);
-        printf("TIM2_SAVE: %s\n", lbuf);
-        FILE *f = fopen(lbuf, "rb");
+        std::string fullPath = std::string(path) + "/" + tm0info.name;
+
+        printf("TIM2_SAVE: %s\n", fullPath.c_str());
+
+        FILE *f = fopen(fullPath.c_str(), "rb");
         if (NULL == f) {
-            ERROR("   Could not open %s for reading\n", lbuf);
+            ERROR("   Could not open %s for reading\n", fullPath.c_str());
             continue;
         }
+
         int len = getfilesize(f);
         tm0 = malloc(len);
         fread(tm0, 1, len, f);
         fclose(f);
 
         if (false == tim2download(tm0)) {
-            ERROR("   Failed to download TIM2 %s\n", lbuf);
+            ERROR("   Failed to download TIM2 %s\n", fullPath.c_str());
             free(tm0);
             continue;
         }
 
-        f = fopen(lbuf, "wb");
+        f = fopen(fullPath.c_str(), "wb");
         if (NULL == f) {
-            ERROR("   Couldn't open %s for writing\n", lbuf);
+            ERROR("   Couldn't open %s for writing\n", fullPath.c_str());
             free(tm0);
             continue;
         }
@@ -124,36 +124,34 @@ bool tm0env_t::load(const char *path) {
     void *tm0;
     struct dirent *de;
     DIR *dir = opendir(path);
-    char lbuf[MAX_PATH];
 
     if (NULL == dir) {
         fprintf(stderr, "Failed to open tm0 folder %s\n", path);
         return false;
     }
 
+    std::string baseDir = path;
+    if (!baseDir.empty() && baseDir.back() != '/' && baseDir.back() != '\\') {
+        baseDir += "/";
+    }
+
     while ((de = readdir(dir)) != NULL) {
         const char *filename = de->d_name;
-        snprintf(lbuf, sizeof(lbuf), "%s/%s", path, filename);
-        /*
-        struct stat st;
-        if(stat(lbuf, &st) == -1) {
-          fprintf(stderr, "Couldn't stat file: %s\n", filename);
-          continue;
-        }*/
+        std::string fullPath = baseDir + filename;
 
         if (streq(extof(filename), ".tm0")) {
             tm0info_t tm0info;
-            FILE *tm0file = fopen(lbuf, "rb");
+            FILE *tm0file = fopen(fullPath.c_str(), "rb");
             if (NULL == tm0file) {
-                ERROR("Could not open TIM2 %s\n", lbuf);
+                ERROR("Could not open TIM2 %s\n", fullPath.c_str());
                 continue;
             }
-            printf("TIM2_LOAD: %s\n", lbuf);
+            printf("TIM2_LOAD: %s\n", fullPath.c_str());
             int len = getfilesize(tm0file);
             tm0 = malloc(len);
             fread(tm0, 1, len, tm0file);
             if (false == tim2upload(tm0)) {
-                ERROR("Failed to upload TIM2 %s\n", lbuf);
+                ERROR("Failed to upload TIM2 %s\n", fullPath.c_str());
             }
             free(tm0);
             fclose(tm0file);

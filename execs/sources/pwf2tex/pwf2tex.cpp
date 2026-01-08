@@ -1,3 +1,4 @@
+#include <bitset>
 #include <dirent.h>
 #include <memory.h>
 #include <stdio.h>
@@ -162,9 +163,7 @@ bool tm0env_t::load(const char *path) {
     return true;
 }
 
-void extract_from_tex0(gs::tex0_t tex0, u32 *outpixels) {
-    int tw, th;
-    wh_from_tex0(tex0, tw, th);
+void extract_from_tex0(gs::tex0_t tex0, int tw, int th, u32 *outpixels) {
     int npixels = tw * th;
     int pixstride = calc_pixel_stride(tex0.psm);
     void *pixels = (void *)(malloc(npixels * pixstride));
@@ -186,9 +185,7 @@ void extract_from_tex0(gs::tex0_t tex0, u32 *outpixels) {
     return;
 }
 
-void inject_tex(gs::tex0_t tex0, u32 *inpixels) {
-    int tw, th;
-    wh_from_tex0(tex0, tw, th);
+void inject_tex(gs::tex0_t tex0, int tw, int th, u32 *inpixels) {
     int npixels = tw * th;
     u32 clut32[256];
     void *clut = (void *)(clut32);
@@ -206,7 +203,7 @@ void inject_tex(gs::tex0_t tex0, u32 *inpixels) {
     return;
 }
 
-void ptr2tex_alloc_out_image_from_tex0(gs::tex0_t tex0, u32 **outpixels) {
+void ptr2tex_alloc_out_image_from_tex0(gs::tex0_t tex0, u32 **outpixels) { // NOT USED
     int tw, th;
     wh_from_tex0(tex0, tw, th);
     int npixels = tw * th;
@@ -219,14 +216,78 @@ void ptr2tex_alloc_out_image_from_tex0(gs::tex0_t tex0, u32 **outpixels) {
         return 1;                  \
     }
 
+struct in_entry {
+    gs::tex0_t tex0head;
+    CLUTClampMode emodeW;
+    CLUTClampMode emodeH;
+    int minW;
+    int maxW;
+    int minH;
+    int maxH;
+    uint64_t unk[3] = {0}; // left here for curiosity sake
+    uint64_t unk2 = 0; // left here for curiosity sake
+};
+
+std::vector<in_entry> load_infile_entries(FILE *listfile, int &numentry) {
+    std::vector<in_entry> in_texture_entries;
+    in_entry tmpEntry;
+    gs::tex0_t tex0;
+    uint64_t clamp_val = 0;
+    uint64_t unk[3] = {0};
+    uint64_t unk2 = 0;
+    int fmt = 0;
+
+    char line[256];
+    while (fgets(line, sizeof(line), listfile)) {
+        if (strstr(line, "---")) {
+            if(numentry != 0) in_texture_entries.push_back(tmpEntry);
+            numentry++;
+        }
+        if (strstr(line, "ID:")) {
+            sscanf(line, "ID: %" PRIx64, &tex0.value);
+            tmpEntry.tex0head = tex0;
+        }
+        else if (strstr(line, "UNK:")) {
+            sscanf(line, "UNK: %" PRIx64 " %" PRIx64 " %" PRIx64, &unk[0], &unk[1], &unk[2]);
+            tmpEntry.unk[0] = unk[0];
+            tmpEntry.unk[1] = unk[1];
+            tmpEntry.unk[2] = unk[2];
+        }
+        else if (strstr(line, "CLAMP:")) {
+            sscanf(line, "CLAMP: %" PRIx64, &clamp_val);
+
+            tmpEntry.emodeW = (CLUTClampMode)((clamp_val >> 0) & 0x3);
+            tmpEntry.emodeH = (CLUTClampMode)((clamp_val >> 2) & 0x3);
+            tmpEntry.minW = (clamp_val >> 4)  & 0x3FF; // Bits 4-13
+            tmpEntry.maxW = (clamp_val >> 14) & 0x3FF; // Bits 14-23
+            tmpEntry.minH = (clamp_val >> 24) & 0x3FF; // Bits 24-33
+            tmpEntry.maxH = (clamp_val >> 34) & 0x3FF; // Bits 34-43
+        }
+        else if (strstr(line, "UNK2:")) {
+            sscanf(line, "UNK2: %" PRIx64, &unk2);
+        }
+        else if (strstr(line, "FMT:")) {
+            sscanf(line, "FMT: %d", &fmt);
+        }
+    }
+
+    return in_texture_entries;
+}
+
 static int cmd_extract_list(int argc, char *args[]) {
     REQUIRE(2, 2);
+
     const char *tm0path = args[0];
     const char *listfilename = args[1];
     const char *pngfolder = (argc > 2) ? args[2] : NULL;
+
     gs::tex0_t tex0;
+    uint64_t clamp_val = 0;
+    uint64_t unk[3] = {0};
+    uint64_t unk2 = 0;
+    int fmt = 0;
     tm0env_t tm0env;
-    if (false == tm0env.load(tm0path))
+    if (tm0env.load(tm0path) == false)
         return 1;
 
     char lbuf[64];
@@ -235,15 +296,29 @@ static int cmd_extract_list(int argc, char *args[]) {
         ERROR("Could not open list file %s\n", listfilename);
         return 1;
     }
+
     int ntex = 0;
-    while (!feof(listfile)) {
-        int err = fscanf(listfile, "%016" PRIx64 "\n", &tex0.value);
-        if (err < 1) {
-            // Did not return tex0 value
-            continue;
-        }
+    in_entry tmpEntry;
+    int numentry = 0;
+
+    std::vector<in_entry> in_texture_entries = load_infile_entries(listfile, numentry);
+
+    for (int i = 0; i < numentry - 1; i++) {
+        // get the entry data from the list
+        tex0.value = in_texture_entries[i].tex0head.value;
+
+        // get the WxH from TEX0 header
         int tw, th;
         wh_from_tex0(tex0, tw, th);
+
+        // check if theres need for replacement and if there is, replace the W or H
+        if (in_texture_entries[i].emodeW >= 2) {
+            tw = in_texture_entries[i].maxW + 1;
+        }
+        if (in_texture_entries[i].emodeH >= 2) {
+            th = in_texture_entries[i].maxH + 1;
+        }
+
         int npixels = tw * th;
         u32 *outpixels = (u32 *)(malloc(npixels * sizeof(*outpixels)));
 
@@ -253,7 +328,7 @@ static int cmd_extract_list(int argc, char *args[]) {
             snprintf(lbuf, sizeof(lbuf), "%d.png", ntex);
 
         printf("EXTRACT: %016" PRIx64 " -> %s\n", tex0.value, lbuf);
-        extract_from_tex0(tex0, outpixels);
+        extract_from_tex0(tex0, tw, th, outpixels);
 
         ntex += 1;
         FILE *outfile = fopen(lbuf, "wb");
@@ -265,10 +340,9 @@ static int cmd_extract_list(int argc, char *args[]) {
         pngwrite(outfile, tw, th, outpixels);
         fclose(outfile);
 
-
         free(outpixels);
     }
-    printf(" %d textures\n", ntex);
+    printf("Extracted %d textures\n", ntex);
     return 0;
 }
 
@@ -289,11 +363,26 @@ static int cmd_inject_list(int argc, char *args[]) {
         return 1;
     }
     int ntex = 0;
-    while (!feof(listfile)) {
-        int err = fscanf(listfile, "%016" PRIx64 "\n", &tex0.value);
-        if (err < 1) continue;
+    int numentry = 0;
+
+    std::vector<in_entry> in_texture_entries = load_infile_entries(listfile, numentry);
+
+    for (int i = 0; i < numentry - 1; i++) {
+        // get the entry data from the list
+        tex0.value = in_texture_entries[i].tex0head.value;
+
+        // get the WxH from TEX0 header
         int tw, th;
         wh_from_tex0(tex0, tw, th);
+
+        // check if theres need for replacement and if there is, replace the W or H
+        if (in_texture_entries[i].emodeW >= 2) {
+            tw = in_texture_entries[i].maxW + 1;
+        }
+        if (in_texture_entries[i].emodeH >= 2) {
+            th = in_texture_entries[i].maxH + 1;
+        }
+
         int npixels = tw * th;
         u32 *inpixels = (u32 *)(malloc(npixels * sizeof(*inpixels)));
 
@@ -314,7 +403,7 @@ static int cmd_inject_list(int argc, char *args[]) {
 
         printf("INJECT: %016" PRIx64 " [%s]\n", tex0.value, lbuf);
 
-        inject_tex(tex0, inpixels);
+        inject_tex(tex0, tw, th, inpixels);
 
         free(inpixels);
         ntex++;

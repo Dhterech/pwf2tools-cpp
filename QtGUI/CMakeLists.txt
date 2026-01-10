@@ -9,12 +9,12 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets REQUIRED)
+find_package(QT NAMES Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
 
 SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../out)
 
-option(ENABLE_DISCORDRPC "Enable Discord Rich Presence" ON)
+option(ENABLE_DISCORDRPC "Enable Discord Rich Presence" OFF)
 if(ENABLE_DISCORDRPC)
     option(BUILD_EXAMPLES "" OFF)
     add_subdirectory(discord-rpc)

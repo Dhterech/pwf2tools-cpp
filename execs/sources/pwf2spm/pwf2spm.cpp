@@ -92,7 +92,7 @@ tex0pack_t tex0listfromspm(const void *spm, int spmlen) {
     return pack;
 }
 
-void gtex0(FILE *spmfile, FILE *outfile, FILE *fmtfile) {
+void gtex0(FILE *spmfile, FILE *outfile) {
     int spmlen = getfilesize(spmfile);
     void *spm = malloc(spmlen);
     fread(spm, 1, spmlen, spmfile);
@@ -138,18 +138,10 @@ int main(int argc, char *args[]) {
                     ERROR("Couldn't open output file %s\n", args[3]);
                     return 1;
                 }
-                char f[strlen(args[3]) + 3];
-                sprintf(f, "%s.fmt", args[3]);
-                FILE *fmtfile = fopen(f, "w");
-                if (NULL == fmtfile) {
-                    ERROR("Couldn't open format output file %s\n", f);
-                    return 1;
-                }                                //*/
-                gtex0(spmfile, outfile, fmtfile  //*/
-                      );
+
+                gtex0(spmfile, outfile);
                 fclose(spmfile);
                 fclose(outfile);
-                fclose(fmtfile);
             }
         }
         else {

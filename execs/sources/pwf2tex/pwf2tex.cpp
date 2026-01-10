@@ -271,6 +271,7 @@ std::vector<in_entry> load_infile_entries(FILE *listfile, int &numentry) {
         }
     }
 
+    in_texture_entries.push_back(tmpEntry); // push last entry
     return in_texture_entries;
 }
 
@@ -303,7 +304,7 @@ static int cmd_extract_list(int argc, char *args[]) {
 
     std::vector<in_entry> in_texture_entries = load_infile_entries(listfile, numentry);
 
-    for (int i = 0; i < numentry - 1; i++) {
+    for (int i = 0; i <= numentry - 1; i++) {
         // get the entry data from the list
         tex0.value = in_texture_entries[i].tex0head.value;
 
@@ -367,7 +368,7 @@ static int cmd_inject_list(int argc, char *args[]) {
 
     std::vector<in_entry> in_texture_entries = load_infile_entries(listfile, numentry);
 
-    for (int i = 0; i < numentry - 1; i++) {
+    for (int i = 0; i <= numentry - 1; i++) {
         // get the entry data from the list
         tex0.value = in_texture_entries[i].tex0head.value;
 

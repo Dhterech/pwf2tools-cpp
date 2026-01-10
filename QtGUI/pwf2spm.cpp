@@ -57,11 +57,11 @@ void pwf2spm::runSpm() {
                 }
                 if (pwf2proc.exitStatus() != 0) {
                     pwf2proc.kill();
-                    pwf2log::writeToLog(LOG_ERROR, "pwf2spm FAILED to run. Status code: " + QString(pwf2proc.exitStatus()).toStdString());
+                    pwf2log::writeToLog(LOG_ERROR, "pwf2spm FAILED to run. Status code: " + QString::number(pwf2proc.exitStatus()).toStdString());
                     /// Not always given an error.
                     if(!pwf2proc.errorString().isEmpty() && !pwf2proc.errorString().isNull())
                         pwf2log::writeToLog(LOG_ERROR, "It seems pwf2spm threw an error too. Error: " + pwf2proc.errorString().toStdString());
-                    pwf2info::showMessage("critical", "Error running pwf2spm!", "Something bad happened and pwf2spm failed to run! Error: " + QString(pwf2proc.error()));
+                    pwf2info::showMessage("critical", "Error running pwf2spm!", "Something bad happened and pwf2spm failed to run! Error: " + QString::number(pwf2proc.error()));
                 } else {
                     pwf2log::writeToLog(LOG_INFO, "Successfully ran pwf2spm with executable " + spmExecutable.toStdString() + " and arguments " + spmArguments.join(" ").toStdString() + "!");
                     pwf2info::showMessage("info", "Done!", "Finished!");
